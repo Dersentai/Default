@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Общий чат</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; height: 100vh;
+      font-family: sans-serif; background: #111; color: #fff;
+      display: flex; flex-direction: column; font-weight: bold;
+    }
+    header { background: #222; padding: 8px; }
+    .top-row { display: flex; gap: 6px; align-items: center; }
+    #infoBtn {
+      width:35px; height:32px; border-radius:50%; background:#e53935;
+      border:none; color:#fff; font-size:16px; cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+    }
+    #usernameInput {
+      flex:1; padding:8px; font-size:14px; border-radius:4px; border:none;
+      background:#333; color:#fff; height:32px;
+    }
+    #loginStatus, #viewerCount { margin-top:6px; font-size:13px; color:#ccc; }
+    #setUsername {
+      padding:0px 5px; border:none; border-radius:4px; font-weight:bold;
+      cursor:pointer; width:100px; height:32px; background:#008f6b; color:#fff;
+    }
+    #sendBtn {
+      padding: 1px 1px; border:none; border-radius:4px; font-weight:bold;
+      cursor:pointer; width: 87px; height:32px; background:#008f6b; color:#fff;
+      flex-shrink:0;
+    }
+    #deleteSelected, #cancelDelete {
+      padding:6px 10px; border:none; border-radius:4px; font-weight:bold;
+      cursor:pointer; width:90px; height:28px; font-size:13px;
+    }
+    #deleteSelected { background:#e53935; color:#fff; }
+    #cancelDelete { background:#888; color:#fff; }
+    #uploadBtn { background:#555; border:none; color:#fff; padding:6px 10px; border-radius:4px; cursor:pointer; flex-shrink:0; }
+    #msgInput {
+      flex:1; padding:8px; font-size:14px; border-radius:4px; border:none;
+      background:#333; color:#fff; height:32px; margin: 0;
+    }
+    #inputArea { display:flex; gap:6px; padding:10px; background:#222; position:sticky; bottom:0; }
+    #chat { flex:1; padding:10px; overflow-y:auto; background:rgba(0,0,0,0.3); }
+    .message { position:relative; margin-bottom:10px; padding:8px; background:rgba(51,51,51,0.6); border-radius:6px; }
+    .message .from { color:#90caf9; margin-left:30px; cursor:pointer; white-space: pre; }
+    .message .time { display:block; margin-left:30px; font-size:12px; color:#ccc; }
+    .status-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; position:absolute; left:28px; top:14px; }
+    .online { background:#00ffb7; } .offline { background:#ff0004; }
+    .message .to { color:#fbc02d; }
+    #uploadStatus { color:#ccc; font-size:13px; margin:4px 10px; min-height:18px; font-style:italic; }
+    /* Multi-delete bar hidden */
+    #multiDeleteBar { display: none; position: sticky; top: 0; background:#333; padding:8px; border-bottom:1px solid #555; gap:12px; align-items:center; }
+    #multiDeleteBar label { color:#fff; line-height:28px; margin-left:8px; }
+    .del-cb { position:absolute; top:12px; left:8px; width:16px; height:16px; accent-color:#ff0004; }
+    /* Info modal */
+    #infoModal {
+      display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+      width:90vmin; height:120vmin; background:#222; color:#fff;
+      border:1px solid #555; border-radius:10px; padding:16px; overflow:auto; z-index:1000;
+    }
+    #infoModal p { font-size:1.1rem; margin:8px 0; }
+    #infoCloseBtn {
+      display:none; position:absolute; bottom: -0px; left:80%; transform:translateX(-50%);
+      background:#444; border:none; color:#fff; padding: 10px 22px;
+      border-radius:4px; cursor:pointer; font-size:14px;
+    }
+  </style>
+  <script>window.UPLOADCARE_PUBLIC_KEY="968b0c6e660b32e06447";</script>
+  <script src="https://ucarecdn.com/libs/widget/3.x/uploadcare.full.min.js"></script>
+</head>
+<body>
+<header>
+  <div class="top-row">
+    <button id="infoBtn">i</button>
+    <input id="usernameInput" placeholder="Имя (необязательно)" />
+    <button id="setUsername">Выбрать/Сбросить</button>
+  </div>
+  <div id="loginStatus"></div>
+  <div id="viewerCount">👁 Зрителей: <span id="viewerNumber">0</span></div>
+</header>
+<div id="multiDeleteBar">
+  <label><input type="checkbox" id="selectAll"> Выбрать все</label>
+  <button id="deleteSelected">Удалить</button>
+  <button id="cancelDelete">Отмена</button>
+</div>
+<div id="chat"></div>
+<div id="uploadStatus"></div>
+<div id="inputArea">
+  <button id="uploadBtn">📎</button>
+  <input id="msgInput" placeholder="Напиши сообщение..." autocomplete="off" />
+  <button id="sendBtn">Отправить</button>
+</div>
+<div id="infoModal">
+  <p>★ В этом общем чате люди могут общаться о чём-угодно и с кем угодно. Содержимое чата могут просматривать все, кто открыли эту страницу по ссылке.</p>
+  <p>★ Вы можете написать любое сообщение в чат как для всех, так и конкретному участнику, нажав на его имя.</p>
+  <p>★ Можно не указывать своего имени, а участвовать как "гость".</p>
+  <p>★ Сбросить ваше текущее имя можно по той же кнопке, что и "Выбрать".</p>
+  <button id="infoCloseBtn">Закрыть</button>
+</div>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+  import { getDatabase, ref, push, onChildAdded, set, onDisconnect, get, child, onValue, serverTimestamp, remove } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js";
+  const app = initializeApp({
+    apiKey: "AIzaSyAhiDOvaCMem1N0s82OKYlvQ_cCg7d1hMg",
+    authDomain: "webchatfree-78358.firebaseapp.com",
+    databaseURL: "https://webchatfree-78358-default-rtdb.firebaseio.com",
+    projectId: "webchatfree-78358",
+    storageBucket: "webchatfree-78358.appspot.com",
+    messagingSenderId: "295141310633",
+    appId: "1:295141310633:web:d805c55a29eb46a4b6a9b8"
+  });
+  const db = getDatabase(app),
+        chatRef = ref(db, "messages"),
+        usersRef = ref(db, "onlineUsers"),
+        configRef = ref(db, "config/bgUrl");
+
+  const chatDiv = document.getElementById("chat"),
+        msgInput = document.getElementById("msgInput"),
+        sendBtn = document.getElementById("sendBtn"),
+        usernameInput = document.getElementById("usernameInput"),
+        setUsernameBtn = document.getElementById("setUsername"),
+        loginStatus = document.getElementById("loginStatus"),
+        viewerNumber = document.getElementById("viewerNumber"),
+        infoBtn = document.getElementById("infoBtn"),
+        uploadBtn = document.getElementById("uploadBtn"),
+        uploadStatus = document.getElementById("uploadStatus"),
+        multiBar = document.getElementById("multiDeleteBar"),
+        selectAllCb = document.getElementById("selectAll"),
+        deleteBtn = document.getElementById("deleteSelected"),
+        cancelBtn = document.getElementById("cancelDelete"),
+        infoCloseBtn = document.getElementById("infoCloseBtn");
+
+  let stored = localStorage.getItem("chatUsername"),
+      username = (stored === null || stored === "") ? "Гость" : stored;
+  loginStatus.textContent = `Вы вошли как: ${username}`;
+
+  function escapeHtml(t) {
+    return t.replace(/[&<>"\/]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','/':'&#x2F;' })[c]);
+  }
+  function updateOnlineStatus(n) {
+    const u = ref(db, `onlineUsers/${n}`);
+    set(u, { online: true, timestamp: serverTimestamp() });
+    onDisconnect(u).remove();
+  }
+  function checkIfOnline(n, cb) {
+    get(child(ref(db), `onlineUsers/${n}`)).then(s => cb(s.exists()));
+  }
+  multiBar.style.display = 'none';
+  selectAllCb.onchange = () => document.querySelectorAll('.del-cb').forEach(cb => cb.checked = selectAllCb.checked);
+  deleteBtn.onclick = () => {
+    const p = prompt("Пароль удаления:");
+    p !== "︅︄︃︅︅︄︅︄︅︅︄︁︅︆︂︅︄︃︅︅︀︅︄︁︅︆︄"
+      ? alert("Неверный пароль")
+      : document.querySelectorAll('.message').forEach(div => {
+          const cb = div.querySelector('.del-cb');
+          if (cb && cb.checked) {
+            remove(ref(db, `messages/${div.dataset.id}`));
+            div.remove();
+          }
+        });
+    multiBar.style.display = 'none';
+  };
+  cancelBtn.onclick = () => {
+    document.querySelectorAll('.del-cb').forEach(cb => cb.remove());
+    selectAllCb.checked = false;
+    multiBar.style.display = 'none';
+  };
+  function showMultiDelete() {
+    if (multiBar.style.display === 'none') {
+      multiBar.style.display = 'flex';
+      document.querySelectorAll('.message').forEach(m => {
+        if (!m.querySelector('.del-cb')) {
+          const cb = document.createElement('input');
+          cb.type = 'checkbox'; cb.className = 'del-cb';
+          m.insertBefore(cb, m.firstChild);
+        }
+      });
+    }
+  }
+
+  uploadBtn.onclick = () => {
+    uploadcare.openDialog(null, {
+      publicKey: window.UPLOADCARE_PUBLIC_KEY,
+      multiple: false,
+      previewStep: false,
+      imagesOnly: false
+    }).done(file => {
+      uploadStatus.textContent = "Выгрузка файла...";
+      file.done(info => {
+        uploadStatus.textContent = "Обработка файла...";
+        const fileUrl = info.cdnUrl.replace(/^https?:\/\/[^/]+/, "https://ucarecdn.com") + "/" + info.name;
+        push(chatRef, {
+          from: username,
+          text: `Файл: ${fileUrl}`,
+          timestamp: serverTimestamp()
+        });
+        uploadStatus.textContent = "Готово";
+        setTimeout(() => uploadStatus.textContent = "", 3000);
+      }).fail(() => {
+        uploadStatus.textContent = "Ошибка загрузки файла";
+        setTimeout(() => uploadStatus.textContent = "", 3000);
+      });
+    });
+  };
+
+  sendBtn.onclick = () => {
+    let t = msgInput.value;
+    if (!t) return;
+
+    if (t.startsWith("setbgurl ")) {
+      const url = t.substring(9).trim();
+      if (url) set(configRef, url);
+      msgInput.value = "";
+      return;
+    }
+
+    if (t.trim() === "clearchat") {
+      const p = prompt("Пароль очистки:");
+      if (p === "︅︄︃︅︅︄︅︄︅︅︄︁︅︆︂︅︄︃︅︅︀︅︄︁︅︆︄") {
+        set(chatRef, null);
+        chatDiv.innerHTML = "";
+        multiBar.style.display = 'none';
+      }
+      msgInput.value = "";
+      return;
+    }
+    const m = t.match(/^@([\s\S]+?)\s*/),
+          to = m ? m[1] : null;
+    if (m) t = t.replace(/^@([\s\S]+?)\s*/, '');
+    push(chatRef, {
+      from: username,
+      to,
+      text: t,
+      timestamp: serverTimestamp()
+    });
+    msgInput.value = "";
+  };
+
+  setUsernameBtn.onclick = () => {
+    const v = usernameInput.value;
+    username = v === "" ? "Гость" : v;
+    localStorage.setItem("chatUsername", v);
+    loginStatus.textContent = `Вы вошли как: ${username}`;
+    usernameInput.value = "";
+    updateOnlineStatus(username);
+  };
+
+  onChildAdded(chatRef, snap => {
+    const m = snap.val(),
+          id = snap.key,
+          div = document.createElement('div');
+    div.className = 'message';
+    div.dataset.id = id;
+
+    const dot = document.createElement('span');
+    dot.className = 'status-dot offline';
+    checkIfOnline(m.from, ok => dot.className = `status-dot ${ok ? "online" : "offline"}`);
+
+    const ns = document.createElement('span');
+    ns.className = 'from';
+    ns.textContent = m.from;
+    ns.onclick = () => {
+      msgInput.value = `@${m.from} `;
+      msgInput.focus();
+    };
+
+    const cs = document.createElement('span');
+    cs.innerHTML = (m.to ? `<span class="to"> → ${escapeHtml(m.to)}</span> ` : '') +
+                   `<span style="white-space:pre-wrap;">${(m.text||'').replace(/(https?:\/\/\S+)/g,url=>
+                     /\.(jpe?g|png|gif|bmp|webp)$/i.test(url)
+                       ? `<a href="${url}" target="_blank"><img src="${url}" style="max-width:200px;max-height:150px;border-radius:8px;"></a>`
+                       : `<a href="${url}" target="_blank">${url}</a>`
+                   )}</span>`;
+
+    let timeSpan = null;
+    if (m.timestamp) {
+      timeSpan = document.createElement('span');
+      timeSpan.className = 'time';
+      const date = new Date(m.timestamp);
+      timeSpan.textContent = `☞ ${date.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}`;
+    }
+
+    div.append(dot, ns, cs);
+    if (timeSpan) div.append(timeSpan);
+
+    chatDiv.append(div);
+    div.addEventListener('dblclick', showMultiDelete);
+    chatDiv.scrollTop = chatDiv.scrollHeight;
+  });
+
+  onValue(usersRef, s => viewerNumber.textContent = s.exists() ? Object.keys(s.val()).length : 0);
+  onValue(configRef, s => document.body.style.backgroundImage = s.exists() ? `url(${s.val()})` : '');
+
+  infoBtn.onclick = () => {
+    document.getElementById('infoModal').style.display = 'block';
+    infoCloseBtn.style.display = 'block';
+  };
+  infoCloseBtn.onclick = () => {
+    document.getElementById('infoModal').style.display = 'none';
+    infoCloseBtn.style.display = 'none';
+  };
+  window.addEventListener('load', () => {
+    updateOnlineStatus(username);
+    if (Notification.permission !== 'granted') Notification.requestPermission();
+  });
+</script>
+</body>
+</html>
